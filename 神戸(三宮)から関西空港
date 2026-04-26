@@ -1,0 +1,84 @@
+(function () {
+  "use strict";
+
+  const url =
+    "https://raw.githubusercontent.com/supermanone-boop/models/main/yotto.glb";
+
+  const P = [
+    [135.197535, 34.678628], // A
+    [135.184187, 34.639802], // B
+    [135.254334, 34.444135]  // C
+  ];
+
+  const SPEED = 16.67; // m/s（60km/h）
+
+  let viewer;
+  let model;
+
+  let i = 0;
+  let progress = 0;
+
+  let lastTime = performance.now();
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  // 距離計算（簡易）
+  function dist(a, b) {
+    const dx = (a[0] - b[0]) * 111000;
+    const dy = (a[1] - b[1]) * 111000;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function spawn() {
+    viewer = geofs.api.viewer;
+
+    const pos = Cesium.Cartesian3.fromDegrees(P[0][0], P[0][1], 0);
+
+    model = viewer.scene.primitives.add(
+      Cesium.Model.fromGltf({
+        url: url,
+        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(pos),
+        scale: 1
+      })
+    );
+
+    console.log("開始：60km/hルート移動");
+    animate();
+  }
+
+  function animate() {
+    setInterval(() => {
+      const now = performance.now();
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      const next = (i + 1) % P.length;
+
+      const d = dist(P[i], P[next]);
+      const step = (SPEED * dt) / d;
+
+      progress += step;
+
+      if (progress >= 1) {
+        progress = 0;
+        i = next;
+      }
+
+      const lon = lerp(P[i][0], P[next][0], progress);
+      const lat = lerp(P[i][1], P[next][1], progress);
+
+      const pos = Cesium.Cartesian3.fromDegrees(lon, lat, 0);
+
+      model.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
+    }, 50);
+  }
+
+  const wait = setInterval(() => {
+    if (window.geofs && geofs.api && window.Cesium) {
+      clearInterval(wait);
+      spawn();
+    }
+  }, 500);
+})();
