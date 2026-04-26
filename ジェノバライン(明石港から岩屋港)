@@ -1,0 +1,109 @@
+(function () {
+  "use strict";
+
+  const url =
+    "https://raw.githubusercontent.com/supermanone-boop/models/main/genesis.glb";
+
+  // 🚢 指定区間
+  const P = [
+    [135.014213, 34.593848],
+    [134.991747, 34.640392],
+    [134.989961, 34.643743],
+    [134.990210, 34.645225]
+  ];
+
+  const SPEED = 27.78; // 🚢 100km/h (m/s)
+  const HEIGHT = 0;
+
+  const SHIPS = [];
+
+  function spawn(dir) {
+    const viewer = geofs.api.viewer;
+
+    const start = dir === 1 ? 0 : P.length - 1;
+
+    const pos = Cesium.Cartesian3.fromDegrees(
+      P[start][0],
+      P[start][1],
+      HEIGHT
+    );
+
+    const model = viewer.scene.primitives.add(
+      Cesium.Model.fromGltf({
+        url,
+        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(pos),
+        scale: 1
+      })
+    );
+
+    SHIPS.push({
+      model,
+      i: start,
+      t: 0,
+      dir,
+      last: performance.now()
+    });
+
+    console.log(dir === 1 ? "🚢 100km/h 出港" : "🚢 100km/h 帰港");
+  }
+
+  function update() {
+    const now = performance.now();
+
+    for (const s of SHIPS) {
+      const dt = (now - s.last) / 1000;
+      s.last = now;
+
+      const next = s.i + s.dir;
+
+      const a = P[s.i];
+      const b = P[next];
+
+      if (!b) continue;
+
+      const dx = (a[0] - b[0]) * 111000;
+      const dy = (a[1] - b[1]) * 111000;
+      const d = Math.sqrt(dx * dx + dy * dy);
+
+      const step = (SPEED * dt) / d;
+      s.t += step;
+
+      if (s.t >= 1) {
+        s.t = 0;
+        s.i = next;
+
+        if (s.i >= P.length - 1) s.dir = -1;
+        if (s.i <= 0) s.dir = 1;
+      }
+
+      const lon = a[0] + (b[0] - a[0]) * s.t;
+      const lat = a[1] + (b[1] - a[1]) * s.t;
+
+      const pos = Cesium.Cartesian3.fromDegrees(lon, lat, HEIGHT);
+
+      const heading = Math.atan2(b[0] - a[0], b[1] - a[1]);
+
+      const hpr = Cesium.Matrix3.fromHeadingPitchRoll(
+        new Cesium.HeadingPitchRoll(heading, 0, 0)
+      );
+
+      const m = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
+
+      Cesium.Matrix4.multiplyByMatrix3(m, hpr, m);
+
+      s.model.modelMatrix = m;
+    }
+  }
+
+  setInterval(update, 50);
+
+  const wait = setInterval(() => {
+    if (window.geofs && geofs.api && window.Cesium) {
+      clearInterval(wait);
+
+      console.log("🚢 100km/h航路起動");
+      spawn(1);
+      spawn(-1);
+    }
+  }, 500);
+})();
