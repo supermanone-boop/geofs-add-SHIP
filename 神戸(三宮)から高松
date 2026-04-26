@@ -1,0 +1,118 @@
+(function () {
+  "use strict";
+
+  const url =
+    "https://raw.githubusercontent.com/supermanone-boop/models/main/genesis.glb";
+
+  // 🚢 長距離航路（大阪湾→西方向）
+  const P = [
+    [135.197801, 34.681677],
+    [135.184995, 34.637082],
+    [134.977874, 34.623424],
+    [134.262198, 34.399295],
+    [134.130221, 34.401977],
+    [134.076445, 34.378165],
+    [134.072185, 34.355098],
+    [134.073909, 34.354516]
+  ];
+
+  const SPEED = 9;
+  const HEIGHT = 0;
+
+  const SHIPS = [];
+
+  function spawnShip(dir) {
+    const viewer = geofs.api.viewer;
+
+    const start = dir === 1 ? 0 : P.length - 1;
+
+    const pos = Cesium.Cartesian3.fromDegrees(
+      P[start][0],
+      P[start][1],
+      HEIGHT
+    );
+
+    const model = viewer.scene.primitives.add(
+      Cesium.Model.fromGltf({
+        url,
+        modelMatrix: Cesium.Transforms.eastNorthUpToFixedFrame(pos),
+        scale: 1
+      })
+    );
+
+    SHIPS.push({
+      model,
+      i: start,
+      t: 0,
+      dir,
+      last: performance.now()
+    });
+
+    console.log(dir === 1 ? "🚢 出港（東→西）" : "🚢 帰港（西→東）");
+  }
+
+  setInterval(() => {
+    spawnShip(1);
+    spawnShip(-1);
+  }, 3 * 60 * 1000);
+
+  function update() {
+    const now = performance.now();
+
+    for (const sh of SHIPS) {
+      const dt = (now - sh.last) / 1000;
+      sh.last = now;
+
+      const next = sh.i + sh.dir;
+
+      const a = P[sh.i];
+      const b = P[next];
+
+      if (!b) continue;
+
+      const dx = (a[0] - b[0]) * 111000;
+      const dy = (a[1] - b[1]) * 111000;
+      const d = Math.sqrt(dx * dx + dy * dy);
+
+      const step = (SPEED * dt) / d;
+      sh.t += step;
+
+      if (sh.t >= 1) {
+        sh.t = 0;
+        sh.i = next;
+
+        if (sh.i >= P.length - 1) sh.dir = -1;
+        if (sh.i <= 0) sh.dir = 1;
+      }
+
+      const lon = a[0] + (b[0] - a[0]) * sh.t;
+      const lat = a[1] + (b[1] - a[1]) * sh.t;
+
+      const pos = Cesium.Cartesian3.fromDegrees(lon, lat, HEIGHT);
+
+      const heading = Math.atan2(b[0] - a[0], b[1] - a[1]);
+
+      const hpr = Cesium.Matrix3.fromHeadingPitchRoll(
+        new Cesium.HeadingPitchRoll(heading, 0, 0)
+      );
+
+      const m = Cesium.Transforms.eastNorthUpToFixedFrame(pos);
+
+      Cesium.Matrix4.multiplyByMatrix3(m, hpr, m);
+
+      sh.model.modelMatrix = m;
+    }
+  }
+
+  setInterval(update, 50);
+
+  const wait = setInterval(() => {
+    if (window.geofs && geofs.api && window.Cesium) {
+      clearInterval(wait);
+
+      console.log("🚢 長距離フェリー航路起動");
+      spawnShip(1);
+      spawnShip(-1);
+    }
+  }, 500);
+})();
